@@ -5,26 +5,23 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+  maxHttpBufferSize: 10e6 // 10MB pour les photos
+});
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// File d'attente et paires
 let waitingUser = null;
-const pairs = {}; // socketId -> socketId
+const pairs = {};
 
 io.on('connection', (socket) => {
 
-  // Recherche d'un partenaire
   socket.on('find', () => {
     if (waitingUser && waitingUser.id !== socket.id) {
-      // Paire trouvée
       const partner = waitingUser;
       waitingUser = null;
-
       pairs[socket.id] = partner.id;
       pairs[partner.id] = socket.id;
-
       socket.emit('matched');
       partner.emit('matched');
     } else {
@@ -33,23 +30,28 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Message
   socket.on('message', (msg) => {
     const partnerId = pairs[socket.id];
-    if (partnerId) {
-      io.to(partnerId).emit('message', { text: msg, self: false });
-    }
+    if (partnerId) io.to(partnerId).emit('message', { text: msg });
   });
 
-  // Quitter le chat
-  socket.on('leave', () => {
-    disconnect(socket);
+  socket.on('image', (data) => {
+    const partnerId = pairs[socket.id];
+    if (partnerId) io.to(partnerId).emit('image', data);
   });
 
-  // Déconnexion
-  socket.on('disconnect', () => {
-    disconnect(socket);
+  socket.on('audio', (data) => {
+    const partnerId = pairs[socket.id];
+    if (partnerId) io.to(partnerId).emit('audio', data);
   });
+
+  socket.on('typing', (isTyping) => {
+    const partnerId = pairs[socket.id];
+    if (partnerId) io.to(partnerId).emit('typing', isTyping);
+  });
+
+  socket.on('leave', () => disconnect(socket));
+  socket.on('disconnect', () => disconnect(socket));
 
   function disconnect(socket) {
     const partnerId = pairs[socket.id];
@@ -58,14 +60,9 @@ io.on('connection', (socket) => {
       delete pairs[partnerId];
     }
     delete pairs[socket.id];
-
-    if (waitingUser && waitingUser.id === socket.id) {
-      waitingUser = null;
-    }
+    if (waitingUser && waitingUser.id === socket.id) waitingUser = null;
   }
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`Serveur lancé sur le port ${PORT}`);
-});
+server.listen(PORT, () => console.log(`Serveur lancé sur le port ${PORT}`));
