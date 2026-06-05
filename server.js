@@ -9,11 +9,8 @@ const io = new Server(server, { maxHttpBufferSize: 10e6 });
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// waitingQueues: { 2: [socket, ...], 3: [socket, ...], 0: [socket, ...] }
 const waitingQueues = { 2: [], 3: [], 4: [], 0: [] };
-// rooms: { roomId: Set of socketIds }
 const rooms = {};
-// socketRoom: socketId -> roomId
 const socketRoom = {};
 
 function generateRoomId() {
@@ -30,21 +27,17 @@ function broadcastToRoom(roomId, event, data, excludeId = null) {
 io.on('connection', (socket) => {
 
   socket.on('find', (size) => {
-    // size: 2, 3, 4, 0 (0 = infini/random up to 6)
     const queueSize = [2, 3, 4, 0].includes(size) ? size : 2;
     const needed = queueSize === 0 ? (2 + Math.floor(Math.random() * 5)) : queueSize;
 
-    // Remove from any existing queue
     Object.keys(waitingQueues).forEach(k => {
-      waitingQueues[k] = waitingQueues[k].filter(s => s.id !== socket.id);
+      waitingQueues[k] = waitingQueues[k].filter(s => s.socket.id !== socket.id);
     });
 
     waitingQueues[queueSize].push({ socket, needed });
     socket.emit('waiting');
 
-    // Check if we can form a room
     const queue = waitingQueues[queueSize];
-    // Group by 'needed' value
     const groups = {};
     queue.forEach(entry => {
       const n = entry.needed;
@@ -57,14 +50,11 @@ io.on('connection', (socket) => {
       const neededCount = parseInt(n);
       if (group.length >= neededCount) {
         const members = group.splice(0, neededCount);
-        // Remove from main queue
         waitingQueues[queueSize] = waitingQueues[queueSize].filter(
           e => !members.find(m => m.socket.id === e.socket.id)
         );
-
         const roomId = generateRoomId();
         rooms[roomId] = new Set(members.map(m => m.socket.id));
-
         members.forEach(m => {
           socketRoom[m.socket.id] = roomId;
           m.socket.emit('matched', { roomId, count: members.length });
@@ -75,17 +65,17 @@ io.on('connection', (socket) => {
 
   socket.on('message', (msg) => {
     const roomId = socketRoom[socket.id];
-    if (roomId) broadcastToRoom(roomId, 'message', { text: msg }, socket.id);
+    if (roomId) broadcastToRoom(roomId, 'message', { text: msg, from: socket.id }, socket.id);
   });
 
   socket.on('image', (data) => {
     const roomId = socketRoom[socket.id];
-    if (roomId) broadcastToRoom(roomId, 'image', data, socket.id);
+    if (roomId) broadcastToRoom(roomId, 'image', { data, from: socket.id }, socket.id);
   });
 
   socket.on('audio', (data) => {
     const roomId = socketRoom[socket.id];
-    if (roomId) broadcastToRoom(roomId, 'audio', data, socket.id);
+    if (roomId) broadcastToRoom(roomId, 'audio', { data, from: socket.id }, socket.id);
   });
 
   socket.on('typing', (isTyping) => {
