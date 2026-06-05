@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>RandomTalk</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0a;
+    --surface: #141414;
+    --border: #222;
+    --accent: #6366f1;
+    --accent2: #8b5cf6;
+    --text: #f1f5f9;
+    --sub: #64748b;
+    --msg-self: #6366f1;
+    --msg-other: #1e1e1e;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+
+  /* HOME SCREEN */
+  #homeScreen {
+    text-align: center;
+    animation: fadeUp 0.6s ease both;
+  }
+
+  .logo {
+    font-size: 48px;
+    margin-bottom: 16px;
+  }
+
+  #homeScreen h1 {
+    font-size: 36px;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+
+  #homeScreen p {
+    color: var(--sub);
+    font-size: 15px;
+    margin-bottom: 40px;
+  }
+
+  .btn-main {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: white;
+    border: none;
+    border-radius: 50px;
+    font-family: 'Inter', sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    padding: 16px 48px;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.2s;
+    letter-spacing: 0.3px;
+  }
+
+  .btn-main:hover { opacity: 0.9; transform: translateY(-2px); }
+  .btn-main:active { transform: translateY(0); }
+
+  /* WAITING SCREEN */
+  #waitingScreen {
+    text-align: center;
+    display: none;
+    animation: fadeUp 0.4s ease both;
+  }
+
+  .spinner {
+    width: 60px;
+    height: 60px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 24px;
+  }
+
+  #waitingScreen h2 {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  #waitingScreen p {
+    color: var(--sub);
+    font-size: 14px;
+    margin-bottom: 32px;
+  }
+
+  .btn-cancel {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--sub);
+    border-radius: 50px;
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    padding: 10px 28px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-cancel:hover { border-color: var(--sub); color: var(--text); }
+
+  /* CHAT SCREEN */
+  #chatScreen {
+    display: none;
+    width: min(600px, 100%);
+    height: min(700px, 90vh);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    flex-direction: column;
+    overflow: hidden;
+    animation: fadeUp 0.4s ease both;
+  }
+
+  .chat-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .chat-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    background: #22c55e;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+
+  .dot.offline { background: var(--sub); animation: none; }
+
+  .chat-status span {
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .btn-next {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--sub);
+    border-radius: 20px;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    padding: 6px 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-next:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Messages */
+  #messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    scroll-behavior: smooth;
+  }
+
+  #messages::-webkit-scrollbar { width: 4px; }
+  #messages::-webkit-scrollbar-track { background: transparent; }
+  #messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .msg {
+    max-width: 75%;
+    padding: 10px 14px;
+    border-radius: 16px;
+    font-size: 14px;
+    line-height: 1.5;
+    animation: msgIn 0.2s ease both;
+    word-break: break-word;
+  }
+
+  .msg.self {
+    background: var(--msg-self);
+    color: white;
+    align-self: flex-end;
+    border-bottom-right-radius: 4px;
+  }
+
+  .msg.other {
+    background: var(--msg-other);
+    color: var(--text);
+    align-self: flex-start;
+    border-bottom-left-radius: 4px;
+    border: 1px solid var(--border);
+  }
+
+  .msg.system {
+    align-self: center;
+    background: transparent;
+    color: var(--sub);
+    font-size: 12px;
+    padding: 4px 12px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+  }
+
+  /* Input */
+  .chat-input {
+    padding: 16px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+  }
+
+  #msgInput {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    padding: 10px 14px;
+    outline: none;
+    resize: none;
+    max-height: 100px;
+    transition: border-color 0.2s;
+  }
+
+  #msgInput:focus { border-color: var(--accent); }
+  #msgInput::placeholder { color: var(--sub); }
+
+  .btn-send {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border: none;
+    border-radius: 12px;
+    width: 42px;
+    height: 42px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.2s;
+    flex-shrink: 0;
+  }
+
+  .btn-send:hover { opacity: 0.85; }
+
+  .btn-send svg {
+    width: 18px;
+    height: 18px;
+    fill: white;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  @keyframes msgIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+</head>
+<body>
+
+<!-- HOME -->
+<div id="homeScreen">
+  <div class="logo">💬</div>
+  <h1>RandomTalk</h1>
+  <p>Discute anonymement avec quelqu'un au hasard</p>
+  <button class="btn-main" onclick="findPartner()">Trouver quelqu'un</button>
+</div>
+
+<!-- WAITING -->
+<div id="waitingScreen">
+  <div class="spinner"></div>
+  <h2>Recherche en cours...</h2>
+  <p>On cherche quelqu'un pour toi 👀</p>
+  <button class="btn-cancel" onclick="cancelSearch()">Annuler</button>
+</div>
+
+<!-- CHAT -->
+<div id="chatScreen">
+  <div class="chat-header">
+    <div class="chat-status">
+      <div class="dot" id="statusDot"></div>
+      <span id="statusText">Connecté avec un inconnu</span>
+    </div>
+    <button class="btn-next" onclick="nextPerson()">Suivant →</button>
+  </div>
+  <div id="messages"></div>
+  <div class="chat-input">
+    <textarea id="msgInput" placeholder="Écris un message..." rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+    <button class="btn-send" onclick="sendMessage()">
+      <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+    </button>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket = io();
+
+function show(id) {
+  ['homeScreen','waitingScreen','chatScreen'].forEach(s => {
+    const el = document.getElementById(s);
+    el.style.display = 'none';
+    if (s === 'chatScreen') el.style.display = 'none';
+  });
+  const target = document.getElementById(id);
+  if (id === 'chatScreen') {
+    target.style.display = 'flex';
+  } else {
+    target.style.display = 'block';
+  }
+}
+
+function findPartner() {
+  show('waitingScreen');
+  socket.emit('find');
+}
+
+function cancelSearch() {
+  socket.emit('leave');
+  show('homeScreen');
+}
+
+function addMessage(text, type = 'other') {
+  const msgs = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = `msg ${type}`;
+  div.textContent = text;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function sendMessage() {
+  const input = document.getElementById('msgInput');
+  const text = input.value.trim();
+  if (!text) return;
+  socket.emit('message', text);
+  addMessage(text, 'self');
+  input.value = '';
+  input.style.height = 'auto';
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+}
+
+function nextPerson() {
+  socket.emit('leave');
+  document.getElementById('messages').innerHTML = '';
+  document.getElementById('statusDot').className = 'dot';
+  document.getElementById('statusText').textContent = 'Connecté avec un inconnu';
+  findPartner();
+}
+
+// Socket events
+socket.on('waiting', () => {
+  show('waitingScreen');
+});
+
+socket.on('matched', () => {
+  document.getElementById('messages').innerHTML = '';
+  show('chatScreen');
+  addMessage('Connecté ! Dis bonjour 👋', 'system');
+});
+
+socket.on('message', (data) => {
+  addMessage(data.text, 'other');
+});
+
+socket.on('partner_left', () => {
+  document.getElementById('statusDot').className = 'dot offline';
+  document.getElementById('statusText').textContent = 'L\'inconnu est parti';
+  addMessage('L\'inconnu a quitté la conversation', 'system');
+});
+</script>
+</body>
+</html>
