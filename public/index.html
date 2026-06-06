@@ -389,7 +389,8 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-  import { getDatabase, ref, set, get, push, onValue, serverTimestamp, onDisconnect, update } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+  import { getDatabase, ref, set, get, push, onValue, onDisconnect, update } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
 
   // 🔥 REMPLACE ICI AVEC TA CONFIG FIREBASE
   const firebaseConfig = {
@@ -405,6 +406,7 @@
   const fbApp = initializeApp(firebaseConfig);
   const auth = getAuth(fbApp);
   const db = getDatabase(fbApp);
+
 
   let currentUser = null;
   let currentChatFriend = null;
@@ -473,20 +475,26 @@
 
   window.fbSendFriendImage = async (dataUrl) => {
     if (!currentChatFriend || !currentUser) return;
-    const chatId = [currentUser.uid, currentChatFriend.uid].sort().join('_');
-    await push(ref(db, `chats/${chatId}/messages`), {
-      data: dataUrl, from: currentUser.uid, pseudo: window.myPseudo,
-      time: Date.now(), type: 'image'
-    });
+    try {
+      // Compresse image avant envoi
+      const compressed = await compressImage(dataUrl, 600, 0.6);
+      const chatId = [currentUser.uid, currentChatFriend.uid].sort().join('_');
+      await push(ref(db, `chats/${chatId}/messages`), {
+        data: compressed, from: currentUser.uid, pseudo: window.myPseudo,
+        time: Date.now(), type: 'image'
+      });
+    } catch(e) { console.error('Image send error', e); window.showToastErr('Erreur envoi image'); }
   };
 
   window.fbSendFriendAudio = async (dataUrl) => {
     if (!currentChatFriend || !currentUser) return;
-    const chatId = [currentUser.uid, currentChatFriend.uid].sort().join('_');
-    await push(ref(db, `chats/${chatId}/messages`), {
-      data: dataUrl, from: currentUser.uid, pseudo: window.myPseudo,
-      time: Date.now(), type: 'audio'
-    });
+    try {
+      const chatId = [currentUser.uid, currentChatFriend.uid].sort().join('_');
+      await push(ref(db, `chats/${chatId}/messages`), {
+        data: dataUrl, from: currentUser.uid, pseudo: window.myPseudo,
+        time: Date.now(), type: 'audio'
+      });
+    } catch(e) { console.error('Audio send error', e); window.showToastErr('Erreur envoi vocal'); }
   };
 
   window.getCurrentUid = () => currentUser ? currentUser.uid : null;
@@ -531,6 +539,26 @@ function getUserClass(id) {
   return userColors[id];
 }
 
+window.showToastErr = (msg) => showToast(msg);
+
+// Compression image avant envoi
+function compressImage(dataUrl, maxSize = 600, quality = 0.6) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let w = img.width, h = img.height;
+      if (w > maxSize || h > maxSize) {
+        if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
+        else { w = Math.round(w * maxSize / h); h = maxSize; }
+      }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.src = dataUrl;
+  });
+}
 function showToast(msg) {
   const t = document.getElementById('errorToast');
   t.textContent = msg; t.style.display = 'block';
@@ -752,20 +780,27 @@ function sendImage(input) {
   const file = input.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = (e) => {
-    const data = e.target.result;
-    if (isFriendChat) { window.fbSendFriendImage(data); }
-    else { socket.emit('image', data); addMessage(data, 'self', true); }
+  reader.onload = async (e) => {
+    const compressed = await compressImage(e.target.result, 600, 0.65);
+    if (isFriendChat) { window.fbSendFriendImage(compressed); addMessage(compressed, 'self', true); }
+    else { socket.emit('image', compressed); addMessage(compressed, 'self', true); }
   };
   reader.readAsDataURL(file);
   input.value = '';
 }
 
-// Fix vocal mobile — détecte le meilleur format supporté
+// Fix vocal mobile — détecte le meilleur format supporté par le navigateur
 function getSupportedMimeType() {
-  const types = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg'];
+  // Ordre optimisé : webm opus (Chrome/Android), mp4 (Safari/iOS), ogg, fallback
+  const types = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/ogg;codecs=opus',
+    'audio/ogg',
+    'audio/mp4',
+  ];
   for (const type of types) {
-    if (MediaRecorder.isTypeSupported(type)) return type;
+    try { if (MediaRecorder.isTypeSupported(type)) return type; } catch(e) {}
   }
   return '';
 }
@@ -774,14 +809,21 @@ async function toggleRecording() {
   const btn = document.getElementById('recordBtn');
   if (!recording) {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
       const mimeType = getSupportedMimeType();
-      const options = mimeType ? { mimeType } : {};
-      mediaRecorder = new MediaRecorder(stream, options);
+      let mediaRecorderOptions = {};
+      if (mimeType) mediaRecorderOptions.mimeType = mimeType;
+      try {
+        mediaRecorder = new MediaRecorder(stream, mediaRecorderOptions);
+      } catch(e) {
+        mediaRecorder = new MediaRecorder(stream);
+      }
       audioChunks = [];
-      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+      mediaRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) audioChunks.push(e.data); };
       mediaRecorder.onstop = () => {
-        const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+        const finalMime = mediaRecorder.mimeType || mimeType || 'audio/webm';
+        const blob = new Blob(audioChunks, { type: finalMime });
+        if (blob.size === 0) { showToast('Enregistrement vide, réessaie'); return; }
         const reader = new FileReader();
         reader.onload = (e) => {
           const data = e.target.result;
@@ -791,11 +833,26 @@ async function toggleRecording() {
         reader.readAsDataURL(blob);
         stream.getTracks().forEach(t => t.stop());
       };
-      mediaRecorder.start(100);
+      mediaRecorder.start(250); // timeslice plus grand = moins de chunks = plus stable
       recording = true; btn.classList.add('recording');
-    } catch { showToast('Micro non disponible'); }
+      // Limite 30 secondes
+      setTimeout(() => {
+        if (recording && mediaRecorder && mediaRecorder.state !== 'inactive') {
+          mediaRecorder.stop();
+          recording = false;
+          btn.classList.remove('recording');
+          showToast('⏱ Max 30 secondes');
+        }
+      }, 30000);
+    } catch(err) {
+      console.error('Micro error:', err);
+      showToast('Micro non disponible — autorise le micro');
+    }
   } else {
-    mediaRecorder.stop(); recording = false; btn.classList.remove('recording');
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+    }
+    recording = false; btn.classList.remove('recording');
   }
 }
 
