@@ -695,6 +695,7 @@ async function addFriend() {
 
 function openFriendChat(uid, pseudo) {
   isFriendChat = true;
+  lastRenderedCount = 0;
   document.getElementById('messages').innerHTML = '';
   document.getElementById('statusText').textContent = pseudo;
   document.getElementById('roomBadge').textContent = '💬 Ami';
@@ -705,11 +706,23 @@ function openFriendChat(uid, pseudo) {
   window.fbOpenChat(uid, pseudo);
 }
 
+let lastRenderedCount = 0;
+
 window.renderFriendMessages = (msgs) => {
   const container = document.getElementById('messages');
-  container.innerHTML = '';
   const uid = window.getCurrentUid();
-  msgs.forEach(m => {
+  
+  // Si moins de messages qu'avant, recharge tout (ex: changement de chat)
+  if (msgs.length < lastRenderedCount) {
+    container.innerHTML = '';
+    lastRenderedCount = 0;
+  }
+  
+  // Ajoute seulement les nouveaux messages
+  const newMsgs = msgs.slice(lastRenderedCount);
+  lastRenderedCount = msgs.length;
+  
+  newMsgs.forEach(m => {
     const isSelf = m.from === uid;
     const cls = isSelf ? 'self' : 'other';
     const time = new Date(m.time).toLocaleTimeString('fr', { hour: '2-digit', minute: '2-digit' });
@@ -741,7 +754,8 @@ window.renderFriendMessages = (msgs) => {
     div.appendChild(timeEl);
     container.appendChild(div);
   });
-  container.scrollTop = container.scrollHeight;
+  
+  if (newMsgs.length > 0) container.scrollTop = container.scrollHeight;
 };
 
 function backToFriends() {
@@ -799,7 +813,9 @@ function sendMessage() {
   const text = input.value.trim();
   if (!text) return;
   if (isFriendChat) {
-    window.fbSendFriendMessage(text);
+    // Affiche immédiatement sans attendre Firebase
+    addMessage(text, 'self');
+    window.fbSendFriendMessage(text).catch(e => showToast('Erreur envoi: ' + e.message));
   } else {
     socket.emit('message', text);
     addMessage(text, 'self');
