@@ -17,7 +17,7 @@ const VAPID_PRIVATE = '1E0KcR54CXDKuNNA-CMd6fWGYpPGZtStI69DtwDw5gE';
 
 webpush.setVapidDetails('mailto:contact@randomtalk.app', VAPID_PUBLIC, VAPID_PRIVATE);
 
-// Store subscriptions: uid -> subscription
+// Store subscriptions: uid -> subscripion
 const subscriptions = {};
 
 // Push subscription endpoint
