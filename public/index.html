@@ -706,23 +706,20 @@ function openFriendChat(uid, pseudo) {
   window.fbOpenChat(uid, pseudo);
 }
 
+window.lastRenderedCount = 0;
 let lastRenderedCount = 0;
 
 window.renderFriendMessages = (msgs) => {
   const container = document.getElementById('messages');
+  if (!container) return;
   const uid = window.getCurrentUid();
   
-  // Si moins de messages qu'avant, recharge tout (ex: changement de chat)
-  if (msgs.length < lastRenderedCount) {
-    container.innerHTML = '';
-    lastRenderedCount = 0;
-  }
+  // Recharge tout
+  container.innerHTML = '';
   
-  // Ajoute seulement les nouveaux messages
-  const newMsgs = msgs.slice(lastRenderedCount);
-  lastRenderedCount = msgs.length;
+  // Affiche tous les messages
   
-  newMsgs.forEach(m => {
+  msgs.forEach(m => {
     const isSelf = m.from === uid;
     const cls = isSelf ? 'self' : 'other';
     const time = new Date(m.time).toLocaleTimeString('fr', { hour: '2-digit', minute: '2-digit' });
@@ -755,7 +752,7 @@ window.renderFriendMessages = (msgs) => {
     container.appendChild(div);
   });
   
-  if (newMsgs.length > 0) container.scrollTop = container.scrollHeight;
+  container.scrollTop = container.scrollHeight;
 };
 
 function backToFriends() {
