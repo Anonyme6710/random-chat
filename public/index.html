@@ -471,6 +471,8 @@
       text, from: currentUser.uid, pseudo: window.myPseudo,
       time: Date.now(), type: 'text'
     });
+    // Déclenche push notif via socket
+    if (window.socketRef) window.socketRef.emit('friend_message_sent', { toUid: currentChatFriend.uid, fromPseudo: window.myPseudo });
   };
 
   window.fbSendFriendImage = async (dataUrl) => {
@@ -509,6 +511,7 @@
         await update(ref(db, 'users/' + user.uid), { online: true });
         onDisconnect(ref(db, 'users/' + user.uid + '/online')).set(false);
         window.showFriendsView(data.pseudo);
+        if (window.onUserLoggedIn) window.onUserLoggedIn(user.uid);
       }
     } else {
       currentUser = null;
@@ -521,7 +524,42 @@
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const socket = io();
+window.socketRef = socket;
 let selectedMode = 2;
+
+// Push notifications setup
+let pushEnabled = false;
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+async function setupPushNotifications(uid) {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    const reg = await navigator.serviceWorker.register('/sw.js');
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return;
+    const res = await fetch('/api/vapidPublicKey');
+    const { key } = await res.json();
+    const subscription = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(key)
+    });
+    await fetch('/api/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid, subscription })
+    });
+    pushEnabled = true;
+    console.log('Push notifications activées');
+  } catch(e) { console.log('Push non disponible:', e); }
+}
 let typingTimeout = null;
 let isTyping = false;
 let mediaRecorder = null;
@@ -599,6 +637,11 @@ async function register() {
 }
 
 function logout() { window.fbLogout(); }
+
+window.onUserLoggedIn = (uid) => {
+  socket.emit('register_uid', uid);
+  setupPushNotifications(uid);
+};
 
 window.showFriendsView = (pseudo) => {
   document.getElementById('authForms').style.display = 'none';
